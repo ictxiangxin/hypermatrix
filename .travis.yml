@@ -3,3 +3,9 @@ language:
 
 os:
     - linux
+
+script:
+    - make test
+
+after_script:
+    - rm -f input.txt
