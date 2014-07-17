@@ -13,6 +13,13 @@
 
 namespace hm
 {
+    inline void hm_swap(size_t &a, size_t &b)
+    {
+        size_t tmp = a;
+        a = b;
+        b = a;
+    }
+
     template<typename VALUE_T>
     class sparse
     {
@@ -180,12 +187,14 @@ namespace hm
             sparselist<VALUE_T> *sb;
             size_t size;
             VALUE_T v;
+            bool transpose;
 
         public:
-            sparseblock(size_t block_size, size_t size, size_t alloc_size, VALUE_T v)
+            sparseblock(size_t block_size, size_t size, size_t alloc_size, VALUE_T v, bool transpose)
             {
                 this->size = block_size;
                 this->v = v;
+                this->transpose = transpose;
                 this->sb = new sparselist<VALUE_T>[this->size];
                 for(size_t i = 0; i < this->size; i++)
                     this->sb[i].init(size, alloc_size, this->v, i);
@@ -198,11 +207,15 @@ namespace hm
 
             VALUE_T get_value(size_t index, size_t jndex)
             {
+                if(this->transpose)
+                    hm_swap(index, jndex);
                 return this->sb[index].get_value(jndex);
             }
 
             bool set_value(size_t index, size_t jndex, VALUE_T v)
             {
+                if(this->transpose)
+                    hm_swap(index, jndex);
                 return this->sb[index].set_value(jndex, v);
             }
 
@@ -260,10 +273,11 @@ namespace hm
         debug("Origin size: (%d, %d)\n", n_size, m_size);
         n_size = n_size ? n_size : 1;
         m_size = m_size ? m_size : 1;
-        n_size = n_size < 0x400 ? n_size : 0x400;
-        m_size = m_size < 0x400 ? m_size : 0x400;
         debug("Final size: (%d, %d)\n", n_size, m_size);
-        this->_sparse = new sparseblock<VALUE_T>(n, m_size, m_size, v);
+        if(this->n < this->m)
+            this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false);
+        else
+            this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true);
         this->_normal = 0;
     }
 
@@ -337,7 +351,10 @@ namespace hm
                 size_t m_size = this->m >> 2;
                 n_size = n_size ? n_size : 1;
                 m_size = m_size ? m_size : 1;
-                this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v);
+                if(this->n < this->m)
+                    this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false);
+                else
+                    this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true);
                 for(size_t i = 0; i < this->n; i++)
                     for(size_t j = 0; j < this->m; j++)
                     {
