@@ -17,7 +17,7 @@ namespace hm
     {
         size_t tmp = a;
         a = b;
-        b = a;
+        b = tmp;
     }
 
     template<typename VALUE_T>
@@ -143,10 +143,20 @@ namespace hm
                 for(size_t i = 0; i < this->size; i++)
                     if(this->sl[i].next == -1)
                     {
-                        this->sl[i].y = index;
-                        this->sl[i].v = v;
-                        this->sl[i].next = end == 0 ? 0 : this->sl[end].next;
-                        this->sl[end].next = i;
+                        if(end == 0 && this->sl[end].y > index)
+                        {
+                            this->sl[i] = this->sl[end];
+                            this->sl[0].next = i;
+                            this->sl[0].y = index;
+                            this->sl[0].v = v;
+                        }
+                        else
+                        {
+                            this->sl[i].next = this->sl[end].next == -1 ? 0 : this->sl[end].next;
+                            this->sl[i].y = index;
+                            this->sl[i].v = v;
+                            this->sl[end].next = i;
+                        }
                         return true;
                     }
                 sparse<VALUE_T> *new_sl = new sparse<VALUE_T>[this->size + this->alloc_size];
@@ -188,16 +198,26 @@ namespace hm
             size_t size;
             VALUE_T v;
             bool transpose;
+            bool symmetric;
 
         public:
-            sparseblock(size_t block_size, size_t size, size_t alloc_size, VALUE_T v, bool transpose)
+            sparseblock(size_t block_size, size_t size, size_t alloc_size, VALUE_T v, bool transpose, bool symmetric = false)
             {
                 this->size = block_size;
                 this->v = v;
                 this->transpose = transpose;
+                this->symmetric = symmetric;
                 this->sb = new sparselist<VALUE_T>[this->size];
-                for(size_t i = 0; i < this->size; i++)
-                    this->sb[i].init(size, alloc_size, this->v, i);
+                if(this->symmetric)
+                {
+                    for(size_t i = 0; i < this->size; i++)
+                        this->sb[i].init(i < size ? i + 1 : size, i < alloc_size ? i + 1 : alloc_size, this->v, i);
+                }
+                else
+                {
+                    for(size_t i = 0; i < this->size; i++)
+                        this->sb[i].init(size, alloc_size, this->v, i);
+                }
             }
 
             ~sparseblock()
@@ -228,7 +248,12 @@ namespace hm
                     {
                         do
                         {
-                            array[this->sb[i].x * m + this->sb[i].sl[p].y] = this->sb[i].sl[p].v;
+                            size_t offset;
+                            if(this->symmetric)
+                                offset = ((this->sb[i].x * (this->sb[i].x + 1)) >> 1) + this->sb[i].sl[p].y;
+                            else
+                                offset = this->sb[i].x * m + this->sb[i].sl[p].y;
+                            array[offset] = this->sb[i].sl[p].v;
                             p = this->sb[i].sl[p].next;
                         } while(p != 0);
                     }
@@ -247,37 +272,42 @@ namespace hm
             size_t n;
             size_t m;
             size_t size;
+            bool symmetric;
             sparseblock<VALUE_T> *_sparse;
             VALUE_T *_normal;
             VALUE_T v; // default value
             size_t c; // default value count
         public:
-            matrix(size_t n, size_t m, VALUE_T v);
+            matrix(size_t n, size_t m, VALUE_T v, bool symmetric);
             ~matrix();
             VALUE_T get(size_t index, size_t jndex);
             void set(size_t index, size_t jndex, VALUE_T v);
     };
 
     template<typename VALUE_T>
-    matrix<VALUE_T>::matrix(size_t n, size_t m, VALUE_T v)
+    matrix<VALUE_T>::matrix(size_t n, size_t m, VALUE_T v, bool symmetric = false)
     {
         this->n = n;
         this->m = m;
         this->v = v;
+        this->symmetric = symmetric;
         this->c = 0;
         this->size = n * m;
         this->status = STATUS_SPARSE;
         this->size = n * m;
+        if(this->symmetric)
+        {
+            if(this->m != this->n)
+                throw 1;
+        }
         size_t n_size = n >> 4;
         size_t m_size = m >> 4;
-        debug("Origin size: (%d, %d)\n", n_size, m_size);
         n_size = n_size ? n_size : 1;
         m_size = m_size ? m_size : 1;
-        debug("Final size: (%d, %d)\n", n_size, m_size);
-        if(this->n < this->m)
-            this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false);
+        if(this->n <= this->m)
+            this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false, this->symmetric);
         else
-            this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true);
+            this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true, this->symmetric);
         this->_normal = 0;
     }
 
@@ -289,13 +319,19 @@ namespace hm
             debug("Index out of range: (%d, %d)\n", index, jndex);
             return this->v;
         }
+        if(this->symmetric)
+            if(index < jndex)
+                hm_swap(index, jndex);
         if(status == STATUS_SPARSE)
         {
             return this->_sparse->get_value(index, jndex);
         }
         if(status == STATUS_NORMAL)
         {
-            return this->_normal[index * this->m + jndex];
+            if(this->symmetric)
+                return this->_normal[((index * (index + 1)) >> 1) + jndex];
+            else
+                return this->_normal[index * this->m + jndex];
         }
     }
 
@@ -307,6 +343,9 @@ namespace hm
             debug("Index out of range: (%d, %d)\n", index, jndex);
             return;
         }
+        if(this->symmetric)
+            if(index < jndex)
+                hm_swap(index, jndex);
         if(this->status == STATUS_SPARSE)
         {
             if(this->_sparse->set_value(index, jndex, v))
@@ -319,10 +358,20 @@ namespace hm
             if(this->c > this->size >> 2)
             {
                 debug("Matrix too dense, tranform to normal matrix.\n");
-                this->_normal = new VALUE_T[n * m];
-                for(size_t i = 0; i < n; i++)
-                    for(size_t j = 0; j < m; j++)
-                        this->_normal[i * m + j] = this->v;
+                if(this->symmetric)
+                {
+                    this->_normal = new VALUE_T[(this->n * (this->n + 1)) >> 1];
+                    for(size_t i = 0; i < this->n; i++)
+                        for(size_t j = 0; j <= i; j++)
+                            this->_normal[((i * (i + 1)) >> 1) + j] = this->v;
+                }
+                else
+                {
+                    this->_normal = new VALUE_T[n * m];
+                    for(size_t i = 0; i < this->n; i++)
+                        for(size_t j = 0; j < this->m; j++)
+                            this->_normal[i * this->m + j] = this->v;
+                }
                 this->_sparse->fill_normal(this->_normal, this->m);
                 delete this->_sparse;
                 this->_sparse = 0;
@@ -332,7 +381,11 @@ namespace hm
         }
         if(this->status == STATUS_NORMAL)
         {
-            size_t offset = index * this->m + jndex;
+            size_t offset;
+            if(this->symmetric)
+                offset = ((index * (index + 1)) >> 1) + jndex;
+            else
+                offset = index * this->m + jndex;
             if(this->_normal[offset] == this->v)
             {
                 if(v != this->v)
@@ -351,17 +404,30 @@ namespace hm
                 size_t m_size = this->m >> 2;
                 n_size = n_size ? n_size : 1;
                 m_size = m_size ? m_size : 1;
-                if(this->n < this->m)
-                    this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false);
+                if(this->n <= this->m)
+                    this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false, this->symmetric);
                 else
-                    this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true);
-                for(size_t i = 0; i < this->n; i++)
-                    for(size_t j = 0; j < this->m; j++)
-                    {
-                        size_t offset = i * this->m + j;
-                        if(this->_normal[offset] != this->v)
-                            this->_sparse->set_value(i, j, this->_normal[offset]);
-                    }
+                    this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true, this->symmetric);
+                if(this->symmetric)
+                {
+                    for(size_t i = 0; i < this->n; i++)
+                        for(size_t j = 0; j <= i; j++)
+                        {
+                            size_t offset = ((i* (i+ 1)) >> 1) + j;
+                            if(this->_normal[offset] != this->v)
+                                this->_sparse->set_value(i, j, this->_normal[offset]);
+                        }
+                }
+                else
+                {
+                    for(size_t i = 0; i < this->n; i++)
+                        for(size_t j = 0; j < this->m; j++)
+                        {
+                            size_t offset = i * this->m + j;
+                            if(this->_normal[offset] != this->v)
+                                this->_sparse->set_value(i, j, this->_normal[offset]);
+                        }
+                }
                 delete [] this->_normal;
                 this->_normal = 0;
                 this->status = STATUS_SPARSE;
