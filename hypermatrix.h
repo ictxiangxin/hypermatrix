@@ -273,12 +273,15 @@ namespace hm
             size_t m;
             size_t size;
             bool symmetric;
+            bool init;
             sparseblock<VALUE_T> *_sparse;
             VALUE_T *_normal;
             VALUE_T v; // default value
             size_t c; // default value count
         public:
             matrix(size_t n, size_t m, VALUE_T v, bool symmetric);
+            matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
+            void _matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
             ~matrix();
             VALUE_T get(size_t index, size_t jndex);
             void set(size_t index, size_t jndex, VALUE_T v);
@@ -287,27 +290,51 @@ namespace hm
     template<typename VALUE_T>
     matrix<VALUE_T>::matrix(size_t n, size_t m, VALUE_T v, bool symmetric = false)
     {
+        this->_matrix(n, m, v, symmetric, STATUS_SPARSE);
+    }
+
+    template<typename VALUE_T>
+    matrix<VALUE_T>::matrix(size_t n, size_t m, VALUE_T v, bool symmetric, int status)
+    {
+        this->_matrix(n, m, v, symmetric, status);
+    }
+
+    template<typename VALUE_T>
+    void matrix<VALUE_T>::_matrix(size_t n, size_t m, VALUE_T v, bool symmetric, int status)
+    {
         this->n = n;
         this->m = m;
         this->v = v;
         this->symmetric = symmetric;
+        this->status = status;
         this->c = 0;
         this->size = n * m;
-        this->status = STATUS_SPARSE;
+        this->status = status;
+        this->init = true;
         this->size = n * m;
         if(this->symmetric)
         {
             if(this->m != this->n)
-                throw 1;
+                throw 1; // can not be symmetric matrix
         }
         size_t n_size = n >> 4;
         size_t m_size = m >> 4;
         n_size = n_size ? n_size : 1;
         m_size = m_size ? m_size : 1;
+        bool trans;
         if(this->n <= this->m)
-            this->_sparse = new sparseblock<VALUE_T>(this->n, m_size, m_size, this->v, false, this->symmetric);
+            trans = false;
         else
-            this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, true, this->symmetric);
+            trans = true;
+        if(this->status == STATUS_SPARSE)
+            this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, trans, this->symmetric);
+        if(this->status == STATUS_NORMAL)
+        {
+            if(this->symmetric)
+                this->_normal = new VALUE_T[(this->n * (this->n + 1)) >> 1];
+            else
+                this->_normal = new VALUE_T[this->n * this->m];
+        }
         this->_normal = 0;
     }
 
@@ -355,7 +382,7 @@ namespace hm
                 else
                     this->c++;
             }
-            if(this->c > this->size >> 2)
+            if(this->c > (this->size >> 2))
             {
                 debug("Matrix too dense, tranform to normal matrix.\n");
                 if(this->symmetric)
@@ -397,7 +424,14 @@ namespace hm
                     this->c--;
             }
             this->_normal[offset] = v;
-            if(this->c < this->size >> 4)
+            if(this->init)
+            {
+                if(this->c > (this->size >> 2))
+                    this->init = false;
+                else
+                    return;
+            }
+            if(this->c < (this->size >> 4))
             {
                 debug("Matrix too sparse, tranform to sparse matrix.\n");
                 size_t n_size = this->n >> 2;
