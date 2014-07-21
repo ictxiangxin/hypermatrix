@@ -285,6 +285,17 @@ namespace hm
             ~matrix();
             VALUE_T get(size_t index, size_t jndex);
             void set(size_t index, size_t jndex, VALUE_T v);
+            matrix *copy();
+
+            size_t get_n()
+            {
+                return this->n;
+            }
+
+            size_t get_m()
+            {
+                return this->m;
+            }
     };
 
     template<typename VALUE_T>
@@ -310,7 +321,10 @@ namespace hm
         this->c = 0;
         this->size = n * m;
         this->status = status;
-        this->init = true;
+        if(this->status == STATUS_NORMAL)
+            this->init = true;
+        else
+            this->init = false;
         this->size = n * m;
         if(this->symmetric)
         {
@@ -327,15 +341,18 @@ namespace hm
         else
             trans = true;
         if(this->status == STATUS_SPARSE)
+        {
             this->_sparse = new sparseblock<VALUE_T>(this->m, n_size, n_size, this->v, trans, this->symmetric);
+            this->_normal = 0;
+        }
         if(this->status == STATUS_NORMAL)
         {
             if(this->symmetric)
                 this->_normal = new VALUE_T[(this->n * (this->n + 1)) >> 1];
             else
                 this->_normal = new VALUE_T[this->n * this->m];
+            this->_sparse;
         }
-        this->_normal = 0;
     }
 
     template<typename VALUE_T>
@@ -468,6 +485,25 @@ namespace hm
                 return;
             }
         }
+    }
+
+    template<typename VALUE_T>
+    matrix<VALUE_T> *matrix<VALUE_T>::copy()
+    {
+        matrix<VALUE_T> *tmp = new matrix<VALUE_T>(this->n, this->m, this->v, this->symmetric, this->status);
+        if(this->symmetric)
+        {
+            for(size_t i = 0; i < this->n; i++)
+                for(size_t j = 0; j <= i; j++)
+                    tmp->set(i, j, this->get(i, j));
+        }
+        else
+        {
+            for(size_t i = 0; i < this->n; i++)
+                for(size_t j = 0; j < this->m; j++)
+                    tmp->set(i, j, this->get(i, j));
+        }
+        return tmp;
     }
 }
 
