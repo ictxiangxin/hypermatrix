@@ -274,27 +274,35 @@ namespace hm
             size_t size;
             bool symmetric;
             bool init;
+            bool transposed;
             sparseblock<VALUE_T> *_sparse;
             VALUE_T *_normal;
             VALUE_T v; // default value
             size_t c; // default value count
+            void _matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
         public:
             matrix(size_t n, size_t m, VALUE_T v, bool symmetric);
             matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
-            void _matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
             ~matrix();
             VALUE_T get(size_t index, size_t jndex);
             void set(size_t index, size_t jndex, VALUE_T v);
+            void transpose();
             matrix *copy();
 
             size_t get_n()
             {
-                return this->n;
+                if(this->transposed)
+                    return this->m;
+                else
+                    return this->n;
             }
 
             size_t get_m()
             {
-                return this->m;
+                if(this->transposed)
+                    return this->n;
+                else
+                    return this->m;
             }
     };
 
@@ -321,6 +329,7 @@ namespace hm
         this->c = 0;
         this->size = n * m;
         this->status = status;
+        this->transposed = false;
         if(this->status == STATUS_NORMAL)
             this->init = true;
         else
@@ -358,6 +367,8 @@ namespace hm
     template<typename VALUE_T>
     VALUE_T matrix<VALUE_T>::get(size_t index, size_t jndex)
     {
+        if(this->transposed)
+            hm_swap(index, jndex);
         if(index >= this->n || jndex >= this->m)
         {
             debug("Index out of range: (%d, %d)\n", index, jndex);
@@ -382,6 +393,8 @@ namespace hm
     template<typename VALUE_T>
     void matrix<VALUE_T>::set(size_t index, size_t jndex, VALUE_T v)
     {
+        if(this->transposed)
+            hm_swap(index, jndex);
         if(index >= this->n || jndex >= this->m)
         {
             debug("Index out of range: (%d, %d)\n", index, jndex);
@@ -488,9 +501,20 @@ namespace hm
     }
 
     template<typename VALUE_T>
+    void matrix<VALUE_T>::transpose()
+    {
+        if(this->transposed)
+            this->transposed = false;
+        else
+            this->transposed = true;
+    }
+
+    template<typename VALUE_T>
     matrix<VALUE_T> *matrix<VALUE_T>::copy()
     {
         matrix<VALUE_T> *tmp = new matrix<VALUE_T>(this->n, this->m, this->v, this->symmetric, this->status);
+        if(this->transposed)
+            tmp->transpose();
         if(this->symmetric)
         {
             for(size_t i = 0; i < this->n; i++)
