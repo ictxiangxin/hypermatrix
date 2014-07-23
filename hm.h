@@ -193,14 +193,13 @@ namespace hm
     template<typename VALUE_T>
     class sparseblock
     {
-        private:
+        public:
             sparselist<VALUE_T> *sb;
             size_t size;
             VALUE_T v;
             bool transpose;
             bool symmetric;
 
-        public:
             sparseblock(size_t block_size, size_t size, size_t alloc_size, VALUE_T v, bool transpose, bool symmetric = false)
             {
                 this->size = block_size;
@@ -223,6 +222,11 @@ namespace hm
             ~sparseblock()
             {
                 delete [] this->sb;
+            }
+
+            size_t get_size()
+            {
+                return this->size;
             }
 
             VALUE_T get_value(size_t index, size_t jndex)
@@ -259,22 +263,6 @@ namespace hm
                     }
                 }
             }
-
-            void fill_new(matrix *m)
-            {
-                for(size_t i = 0; i < this->size; i++)
-                {
-                    size_t p = 0;
-                    if(this->sb[i].sl[p].next != -1)
-                    {
-                        do
-                        {
-                            m->set(this->sb[i].x, this->sb[i].sl[p].y, this->sb[i].sl[p].v)
-                            p = this->sb[i].sl[p].next;
-                        } while(p != 0);
-                    }
-                }
-            }
     };
 
     template<typename VALUE_T>
@@ -296,6 +284,7 @@ namespace hm
             VALUE_T v; // default value
             size_t c; // default value count
             void _matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
+            void sparse_fill_new(matrix *mx);
         public:
             matrix(size_t n, size_t m, VALUE_T v, bool symmetric);
             matrix(size_t n, size_t m, VALUE_T V, bool symmetric, int status);
@@ -377,6 +366,25 @@ namespace hm
             else
                 this->_normal = new VALUE_T[this->n * this->m];
             this->_sparse;
+        }
+    }
+
+    template<typename VALUE_T>
+    void matrix<VALUE_T>::sparse_fill_new(matrix<VALUE_T> *mx)
+    {
+        size_t size = this->size;
+        sparselist<VALUE_T> *sb = this->_sparse->sb;
+        for(size_t i = 0; i < size; i++)
+        {
+            size_t p = 0;
+            if(sb[i].sl[p].next != -1)
+            {
+                do
+                {
+                    mx->set(sb[i].x, sb[i].sl[p].y, sb[i].sl[p].v);
+                    p = sb[i].sl[p].next;
+                } while(p != 0);
+            }
         }
     }
 
@@ -532,7 +540,7 @@ namespace hm
         if(this->transposed)
             tmp->transpose();
         if(tmp->status == STATUS_SPARSE)
-            this->fill_new(tmp);
+            this->sparse_fill_new(tmp);
         if(tmp->status == STATUS_NORMAL)
         {
             if(tmp->symmetric)
