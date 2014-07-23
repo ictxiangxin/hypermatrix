@@ -259,6 +259,22 @@ namespace hm
                     }
                 }
             }
+
+            void fill_new(matrix *m)
+            {
+                for(size_t i = 0; i < this->size; i++)
+                {
+                    size_t p = 0;
+                    if(this->sb[i].sl[p].next != -1)
+                    {
+                        do
+                        {
+                            m->set(this->sb[i].x, this->sb[i].sl[p].y, this->sb[i].sl[p].v)
+                            p = this->sb[i].sl[p].next;
+                        } while(p != 0);
+                    }
+                }
+            }
     };
 
     template<typename VALUE_T>
@@ -515,17 +531,22 @@ namespace hm
         matrix<VALUE_T> *tmp = new matrix<VALUE_T>(this->n, this->m, this->v, this->symmetric, this->status);
         if(this->transposed)
             tmp->transpose();
-        if(this->symmetric)
+        if(tmp->status == STATUS_SPARSE)
+            this->fill_new(tmp);
+        if(tmp->status == STATUS_NORMAL)
         {
-            for(size_t i = 0; i < this->n; i++)
-                for(size_t j = 0; j <= i; j++)
-                    tmp->set(i, j, this->get(i, j));
-        }
-        else
-        {
-            for(size_t i = 0; i < this->n; i++)
-                for(size_t j = 0; j < this->m; j++)
-                    tmp->set(i, j, this->get(i, j));
+            if(tmp->symmetric)
+            {
+                for(size_t i = 0; i < this->n; i++)
+                    for(size_t j = 0; j <= i; j++)
+                        tmp->set(i, j, this->get(i, j));
+            }
+            else
+            {
+                for(size_t i = 0; i < this->n; i++)
+                    for(size_t j = 0; j < this->m; j++)
+                        tmp->set(i, j, this->get(i, j));
+            }
         }
         return tmp;
     }
